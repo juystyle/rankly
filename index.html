@@ -4087,13 +4087,16 @@
     position:absolute;
     inset:0;
     z-index:100;
-    /* Phase X++: 모든 터치/클릭이 확실히 동작하도록 */
-    cursor:pointer;
+    /* Phase X++: 터치 반응 UX (active일 때만 적용) */
     touch-action:manipulation;
     -webkit-user-select:none;
     user-select:none;
     -webkit-tap-highlight-color:rgba(225,90,43,.2);
-    pointer-events:auto !important;  /* 강제 활성화 */
+    /* z-index 100 유지하되, .screen 기본 규칙(opacity:0, pointer-events:none)에 의존 */
+    /* pointer-events:auto !important 제거 - 이게 비활성 상태에서도 클릭 가로채는 버그 유발함 */
+  }
+  .screen.splash-v1.active{
+    cursor:pointer;
   }
   .splash-v1::before{
     content:"";
@@ -4102,7 +4105,7 @@
     width:280px; height:280px;
     background:radial-gradient(circle, rgba(225,90,43,.25) 0%, transparent 70%);
     border-radius:50%;
-    pointer-events:none;  /* 의사 요소는 클릭 통과 */
+    pointer-events:none;
   }
   .splash-v1::after{
     content:"";
@@ -4111,7 +4114,7 @@
     width:220px; height:220px;
     background:radial-gradient(circle, rgba(246,215,122,.15) 0%, transparent 70%);
     border-radius:50%;
-    pointer-events:none;  /* 의사 요소는 클릭 통과 */
+    pointer-events:none;
   }
   .splash-content{
     text-align:center;
@@ -8463,37 +8466,35 @@
   let welcomeIndex = 0;
   let splashTimer = null;
 
-  window.addEventListener('load', ()=>{
-    // Phase I: 재방문이면 Splash/Welcome 건너뜀
+  // Phase X++: 가장 확실한 초기화 - DOMContentLoaded에서 즉시 처리
+  // window.load는 이미지/폰트 로딩까지 기다려서 너무 늦음 (아이패드에서 문제)
+  function initApp(){
+    if(window._ranklyInitialized) return;  // 이중 실행 방지
+    window._ranklyInitialized = true;
+
     if(appState.splashSeen){
+      // 재방문: home으로 바로
       document.querySelectorAll('.screen').forEach(s => {
         s.classList.toggle('active', s.dataset.screen === 'home');
       });
-      // 사이드 네비 동기화
       document.querySelectorAll('#switcher button').forEach(b=>{
         b.classList.toggle('active', b.dataset.target === 'home');
       });
-      return;
+    } else {
+      // 첫 방문: 2초 후 Welcome 자동 이동
+      if(splashTimer) clearTimeout(splashTimer);
+      splashTimer = setTimeout(()=>{
+        goTo('welcome', true);
+      }, 2000);
     }
-    // 첫 진입: 2초 후 자동 Welcome (이전 타이머 있으면 취소)
-    if(splashTimer) clearTimeout(splashTimer);
-    splashTimer = setTimeout(()=>{
-      goTo('welcome', true);
-    }, 2000);
-  });
+  }
 
-  // Phase X+: DOMContentLoaded 시점에도 타이머 백업 등록 (iOS load 이벤트 타이밍 이슈 방어)
-  document.addEventListener('DOMContentLoaded', ()=>{
-    if(appState.splashSeen) return;
-    // 이미 welcome/home으로 간 상태면 스킵
-    const activeScreen = document.querySelector('.screen.active');
-    if(activeScreen && activeScreen.dataset.screen !== 'splash') return;
-    // 타이머 이중 등록 방지
-    if(splashTimer) return;
-    splashTimer = setTimeout(()=>{
-      goTo('welcome', true);
-    }, 2000);
-  });
+  // DOM 준비되면 즉시 실행 (이미 로드됐으면 즉시)
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
 
   // Splash 탭하면 즉시 Welcome
   function skipSplash(){
@@ -8506,7 +8507,6 @@
 
   // iOS/아이패드 터치 이벤트 핸들러 (onclick이 가끔 안 먹히는 경우 대비)
   function handleSplashTouch(event){
-    // 기본 동작(예: 300ms 후 click 이벤트) 방지하고 즉시 처리
     if(event) event.preventDefault();
     skipSplash();
   }
