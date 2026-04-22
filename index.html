@@ -8521,12 +8521,14 @@
       if(handled) return;
       handled = true;
       if(e && e.preventDefault) e.preventDefault();
+      if(e && e.stopPropagation) e.stopPropagation();
       skipSplash();
     };
 
-    // click은 모바일 터치도 자동 커버. touchstart는 의도치 않은 터치 위험.
-    // keydown은 접근성 (키보드 사용자).
-    splash.addEventListener('click', handleSkip);
+    // capture: true = 확장 프로그램 간섭 방어
+    const captureOpts = { capture: true };
+    splash.addEventListener('click', handleSkip, captureOpts);
+    splash.addEventListener('pointerup', handleSkip, captureOpts);  // 폴백
     splash.addEventListener('keydown', (e) => {
       if(e.key === 'Enter' || e.key === ' ') handleSkip(e);
     });
@@ -8538,33 +8540,44 @@
     const welcomePrev = document.getElementById('welcomePrev');
     const welcomeSkip = document.getElementById('welcomeSkipBtn');
 
-    // 버튼마다 독립적인 중복 방지 - 쿨다운 방식 (200ms)
-    // 이렇게 하면 다음 슬라이드에서 다시 같은 버튼 눌러도 동작함
-    const throttle = (fn) => {
-      let lastCall = 0;
+    // 단순 cooldown 방식 - 처음 클릭은 무조건 실행, 이후 200ms 내 중복만 차단
+    let lastClickTime = 0;
+    const cooldown = (fn) => {
       return (e) => {
         const now = Date.now();
-        if(now - lastCall < 200) return;  // 200ms 내 중복 무시
-        lastCall = now;
-        if(e) e.preventDefault();
+        if(now - lastClickTime < 200 && lastClickTime > 0) return;
+        lastClickTime = now;
+        if(e && e.preventDefault) e.preventDefault();
+        if(e && e.stopPropagation) e.stopPropagation();
         fn();
       };
     };
 
+    // capture: true = 브라우저 확장 프로그램보다 먼저 이벤트 받기 (Extrabux 등 간섭 방어)
+    const captureOpts = { capture: true };
+
     if(welcomeBtn){
-      welcomeBtn.addEventListener('click', throttle(nextWelcome));
+      const h = cooldown(nextWelcome);
+      welcomeBtn.addEventListener('click', h, captureOpts);
+      welcomeBtn.addEventListener('pointerup', h, captureOpts);  // 폴백
     }
     if(welcomePrev){
-      welcomePrev.addEventListener('click', throttle(prevWelcome));
+      const h = cooldown(prevWelcome);
+      welcomePrev.addEventListener('click', h, captureOpts);
+      welcomePrev.addEventListener('pointerup', h, captureOpts);
     }
     if(welcomeSkip){
-      welcomeSkip.addEventListener('click', throttle(skipWelcome));
+      const h = cooldown(skipWelcome);
+      welcomeSkip.addEventListener('click', h, captureOpts);
+      welcomeSkip.addEventListener('pointerup', h, captureOpts);
     }
 
     // Welcome dot 버튼들 (있다면)
     document.querySelectorAll('.welcome-dot').forEach((dot, idx) => {
       if(typeof goToWelcomeSlide === 'function'){
-        dot.addEventListener('click', throttle(() => goToWelcomeSlide(idx)));
+        const h = cooldown(() => goToWelcomeSlide(idx));
+        dot.addEventListener('click', h, captureOpts);
+        dot.addEventListener('pointerup', h, captureOpts);
       }
     });
   });
